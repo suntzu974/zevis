@@ -7,6 +7,7 @@ use axum::{
 };
 use redis::{aio::ConnectionManager, Client};
 use serde::{Deserialize, Serialize};
+use sqlx::{PgPool, Row};
 use std::{collections::HashMap, sync::Arc};
 use tower::ServiceBuilder;
 use tower_http::services::ServeDir;
@@ -14,11 +15,15 @@ use uuid::Uuid;
 use tokio::sync::broadcast;
 use futures_util::{SinkExt, StreamExt};
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, sqlx::FromRow)]
 struct User {
-    id: u32,
+    id: i32,
     name: String,
     email: String,
+    #[serde(with = "chrono::serde::ts_seconds")]
+    created_at: chrono::DateTime<chrono::Utc>,
+    #[serde(with = "chrono::serde::ts_seconds")]
+    updated_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Deserialize)]
@@ -49,17 +54,38 @@ struct UserNotification {
     message: String,
 }
 
-// Application state containing Valkey connection and broadcast channel
+// Application state containing database pool, Redis connection and broadcast channel
 #[derive(Clone)]
 struct AppState {
+    db: PgPool,
     redis: ConnectionManager,
     broadcast_tx: broadcast::Sender<String>,
 }
 
 #[tokio::main]
 async fn main() {
-    // Connect to Valkey/Redis
-    let redis_client = Client::open("redis://default:HpNKUsNN27031968@www.goyav.re:6379/").expect("Failed to create Redis client");
+    // Load environment variables
+    dotenv::dotenv().ok();
+    
+    // Database connection
+    let database_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgresql://postgres:password@localhost:5432/zevis".to_string());
+    
+    let db_pool = PgPool::connect(&database_url)
+        .await
+        .expect("Failed to connect to PostgreSQL");
+    
+    // Run migrations
+    sqlx::migrate!("./migrations")
+        .run(&db_pool)
+        .await
+        .expect("Failed to run migrations");
+    
+    // Connect to Valkey/Redis (still used for WebSocket broadcasting)
+    let redis_url = std::env::var("REDIS_URL")
+        .unwrap_or_else(|_| "redis://default:HpNKUsNN27031968@www.goyav.re:6379/".to_string());
+    
+    let redis_client = Client::open(redis_url).expect("Failed to create Redis client");
     let redis_connection = ConnectionManager::new(redis_client)
         .await
         .expect("Failed to connect to Redis");
@@ -68,6 +94,7 @@ async fn main() {
     let (broadcast_tx, _) = broadcast::channel(100);
     
     let app_state = AppState {
+        db: db_pool,
         redis: redis_connection,
         broadcast_tx,
     };
@@ -92,7 +119,8 @@ async fn main() {
     println!("Server running on http://0.0.0.0:3000");
     println!("WebSocket available at ws://0.0.0.0:3000/ws");
     println!("Test page available at http://0.0.0.0:3000/static/index.html");
-    println!("Make sure Valkey/Redis is running on www.goyav.re:6379");
+    println!("PostgreSQL database connected");
+    println!("Redis/Valkey connected for WebSocket broadcasting");
     
     axum::serve(listener, app).await.unwrap();
 }
@@ -126,148 +154,97 @@ async fn health_check(State(state): State<AppState>) -> Json<serde_json::Value> 
 }
 
 async fn get_users(State(state): State<AppState>) -> Result<Json<Vec<User>>, StatusCode> {
-    let mut conn = state.redis.clone();
-    
-    // Get all user keys
-    let keys: Vec<String> = match redis::cmd("KEYS")
-        .arg("user:*")
-        .query_async(&mut conn)
+    match sqlx::query_as::<_, User>("SELECT id, name, email, created_at, updated_at FROM users ORDER BY created_at DESC")
+        .fetch_all(&state.db)
         .await 
     {
-        Ok(keys) => keys,
-        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
-    };
-    
-    let mut users = Vec::new();
-    
-    for key in keys {
-        if let Ok(user_json) = redis::cmd("GET")
-            .arg(&key)
-            .query_async::<_, String>(&mut conn)
-            .await 
-        {
-            if let Ok(user) = serde_json::from_str::<User>(&user_json) {
-                users.push(user);
-            }
+        Ok(users) => Ok(Json(users)),
+        Err(e) => {
+            eprintln!("Database error: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
-    
-    // If no users in Redis, return some default users and store them
-    if users.is_empty() {
-        let default_users = vec![
-            User {
-                id: 1,
-                name: "Alice".to_string(),
-                email: "alice@example.com".to_string(),
-            },
-            User {
-                id: 2,
-                name: "Bob".to_string(),
-                email: "bob@example.com".to_string(),
-            },
-        ];
-        
-        // Store default users in Redis
-        for user in &default_users {
-            if let Ok(user_json) = serde_json::to_string(user) {
-                let _: () = redis::cmd("SET")
-                    .arg(format!("user:{}", user.id))
-                    .arg(user_json)
-                    .query_async(&mut conn)
-                    .await
-                    .unwrap_or(());
-            }
-        }
-        
-        return Ok(Json(default_users));
-    }
-    
-    Ok(Json(users))
 }
 
-async fn get_user(axum::extract::Path(id): axum::extract::Path<u32>, State(state): State<AppState>) -> Result<Json<User>, StatusCode> {
-    let mut conn = state.redis.clone();
-    
-    match redis::cmd("GET")
-        .arg(format!("user:{}", id))
-        .query_async::<_, String>(&mut conn)
+async fn get_user(axum::extract::Path(id): axum::extract::Path<i32>, State(state): State<AppState>) -> Result<Json<User>, StatusCode> {
+    match sqlx::query_as::<_, User>("SELECT id, name, email, created_at, updated_at FROM users WHERE id = $1")
+        .bind(id)
+        .fetch_one(&state.db)
         .await 
     {
-        Ok(user_json) => {
-            match serde_json::from_str::<User>(&user_json) {
-                Ok(user) => Ok(Json(user)),
-                Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
-            }
+        Ok(user) => Ok(Json(user)),
+        Err(sqlx::Error::RowNotFound) => Err(StatusCode::NOT_FOUND),
+        Err(e) => {
+            eprintln!("Database error: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
-        Err(_) => Err(StatusCode::NOT_FOUND),
     }
 }
 
 async fn create_user(State(state): State<AppState>, Json(payload): Json<CreateUser>) -> Result<Json<User>, StatusCode> {
-    let mut conn = state.redis.clone();
-    
-    // Generate a new ID (in a real app, you'd want better ID generation)
-    let new_id = chrono::Utc::now().timestamp() as u32;
-    
-    let user = User {
-        id: new_id,
-        name: payload.name.clone(),
-        email: payload.email.clone(),
-    };
-    
-    // Store user in Redis
-    match serde_json::to_string(&user) {
-        Ok(user_json) => {
-            match redis::cmd("SET")
-                .arg(format!("user:{}", user.id))
-                .arg(user_json)
-                .query_async::<_, ()>(&mut conn)
-                .await 
-            {
-                Ok(_) => {
-                    // Create notification for WebSocket
-                    let notification = UserNotification {
-                        id: Uuid::new_v4().to_string(),
-                        event_type: "user_created".to_string(),
-                        user_data: user.clone(),
-                        timestamp: chrono::Utc::now().to_rfc3339(),
-                        message: format!("Nouvel utilisateur créé: {} ({})", user.name, user.email),
-                    };
-                    
-                    // Send notification via WebSocket
-                    if let Ok(notification_json) = serde_json::to_string(&notification) {
-                        let _ = state.broadcast_tx.send(notification_json);
-                    }
-                    
-                    Ok(Json(user))
-                },
-                Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    // Insert user into PostgreSQL
+    match sqlx::query_as::<_, User>(
+        "INSERT INTO users (name, email) VALUES ($1, $2) RETURNING id, name, email, created_at, updated_at"
+    )
+    .bind(&payload.name)
+    .bind(&payload.email)
+    .fetch_one(&state.db)
+    .await 
+    {
+        Ok(user) => {
+            // Create notification for WebSocket
+            let notification = UserNotification {
+                id: Uuid::new_v4().to_string(),
+                event_type: "user_created".to_string(),
+                user_data: user.clone(),
+                timestamp: chrono::Utc::now().to_rfc3339(),
+                message: format!("Nouvel utilisateur créé: {} ({})", user.name, user.email),
+            };
+            
+            // Store notification in database
+            let _ = sqlx::query(
+                "INSERT INTO user_events (event_type, user_id, user_data, message) VALUES ($1, $2, $3, $4)"
+            )
+            .bind(&notification.event_type)
+            .bind(user.id)
+            .bind(serde_json::to_value(&user).unwrap_or_default())
+            .bind(&notification.message)
+            .execute(&state.db)
+            .await;
+            
+            // Send notification via WebSocket
+            if let Ok(notification_json) = serde_json::to_string(&notification) {
+                let _ = state.broadcast_tx.send(notification_json);
             }
+            
+            Ok(Json(user))
         }
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        Err(sqlx::Error::Database(db_err)) if db_err.constraint() == Some("users_email_key") => {
+            Err(StatusCode::CONFLICT) // Email already exists
+        }
+        Err(e) => {
+            eprintln!("Database error: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
     }
 }
 
-async fn delete_user(axum::extract::Path(id): axum::extract::Path<u32>, State(state): State<AppState>) -> Result<StatusCode, StatusCode> {
-    let mut conn = state.redis.clone();
-    
+async fn delete_user(axum::extract::Path(id): axum::extract::Path<i32>, State(state): State<AppState>) -> Result<StatusCode, StatusCode> {
     // Get user data before deletion for notification
-    let user_data = match redis::cmd("GET")
-        .arg(format!("user:{}", id))
-        .query_async::<_, String>(&mut conn)
-        .await 
-    {
-        Ok(user_json) => serde_json::from_str::<User>(&user_json).ok(),
-        Err(_) => None,
-    };
+    let user_data = sqlx::query_as::<_, User>("SELECT id, name, email, created_at, updated_at FROM users WHERE id = $1")
+        .bind(id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
-    match redis::cmd("DEL")
-        .arg(format!("user:{}", id))
-        .query_async::<_, i32>(&mut conn)
+    // Delete user from database
+    match sqlx::query("DELETE FROM users WHERE id = $1")
+        .bind(id)
+        .execute(&state.db)
         .await 
     {
-        Ok(deleted_count) => {
-            if deleted_count > 0 {
+        Ok(result) => {
+            if result.rows_affected() > 0 {
                 // Send notification if we have user data
                 if let Some(user) = user_data {
                     let notification = UserNotification {
@@ -277,6 +254,17 @@ async fn delete_user(axum::extract::Path(id): axum::extract::Path<u32>, State(st
                         timestamp: chrono::Utc::now().to_rfc3339(),
                         message: format!("Utilisateur supprimé: {} ({})", user.name, user.email),
                     };
+                    
+                    // Store notification in database
+                    let _ = sqlx::query(
+                        "INSERT INTO user_events (event_type, user_id, user_data, message) VALUES ($1, $2, $3, $4)"
+                    )
+                    .bind(&notification.event_type)
+                    .bind(user.id)
+                    .bind(serde_json::to_value(&user).unwrap_or_default())
+                    .bind(&notification.message)
+                    .execute(&state.db)
+                    .await;
                     
                     // Send notification via WebSocket
                     if let Ok(notification_json) = serde_json::to_string(&notification) {
@@ -289,7 +277,10 @@ async fn delete_user(axum::extract::Path(id): axum::extract::Path<u32>, State(st
                 Err(StatusCode::NOT_FOUND)
             }
         }
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        Err(e) => {
+            eprintln!("Database error: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
     }
 }
 
