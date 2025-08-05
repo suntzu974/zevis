@@ -4,11 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-axum = "0.7"
+axum = { version = "0.7", features = ["ws"] }
 tokio = { version = "1.0", features = ["full"] }
 tower = "0.4"
+tower-http = { version = "0.5", features = ["fs"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 redis = { version = "0.24", features = ["tokio-comp", "connection-manager"] }
 uuid = { version = "1.0", features = ["v4"] }
+tokio-tungstenite = "0.21"
+futures-util = "0.3"

@@ -1,7 +1,7 @@
 use axum::{
-    extract::{Query, State},
+    extract::{Query, State, WebSocketUpgrade, ws::{WebSocket, Message}},
     http::StatusCode,
-    response::Json,
+    response::{Json, Response},
     routing::{get, post, delete},
     Router,
 };
@@ -9,7 +9,10 @@ use redis::{aio::ConnectionManager, Client};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 use tower::ServiceBuilder;
+use tower_http::services::ServeDir;
 use uuid::Uuid;
+use tokio::sync::broadcast;
+use futures_util::{SinkExt, StreamExt};
 
 #[derive(Serialize, Deserialize)]
 struct User {
@@ -29,10 +32,19 @@ struct Params {
     name: Option<String>,
 }
 
-// Application state containing Valkey connection
+#[derive(Serialize, Deserialize, Clone)]
+struct WsMessage {
+    id: String,
+    user: String,
+    message: String,
+    timestamp: String,
+}
+
+// Application state containing Valkey connection and broadcast channel
 #[derive(Clone)]
 struct AppState {
     redis: ConnectionManager,
+    broadcast_tx: broadcast::Sender<String>,
 }
 
 #[tokio::main]
@@ -43,8 +55,12 @@ async fn main() {
         .await
         .expect("Failed to connect to Redis");
     
+    // Create broadcast channel for WebSocket messages
+    let (broadcast_tx, _) = broadcast::channel(100);
+    
     let app_state = AppState {
         redis: redis_connection,
+        broadcast_tx,
     };
 
     // Build our application with routes
@@ -54,6 +70,8 @@ async fn main() {
         .route("/users/:id", get(get_user).delete(delete_user))
         .route("/health", get(health_check))
         .route("/cache/:key", get(get_cache).post(set_cache).delete(delete_cache))
+        .route("/ws", get(websocket_handler))
+        .nest_service("/static", ServeDir::new("static"))
         .layer(ServiceBuilder::new())
         .with_state(app_state);
 
@@ -63,6 +81,8 @@ async fn main() {
         .unwrap();
     
     println!("Server running on http://127.0.0.1:3000");
+    println!("WebSocket available at ws://127.0.0.1:3000/ws");
+    println!("Test page available at http://127.0.0.1:3000/static/index.html");
     println!("Make sure Valkey/Redis is running on www.goyav.re:6379");
     
     axum::serve(listener, app).await.unwrap();
@@ -282,5 +302,97 @@ async fn delete_cache(axum::extract::Path(key): axum::extract::Path<String>, Sta
             }
         }
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
+}
+
+// WebSocket handler
+async fn websocket_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
+    ws.on_upgrade(|socket| websocket_connection(socket, state))
+}
+
+async fn websocket_connection(socket: WebSocket, state: AppState) {
+    let (mut sender, mut receiver) = socket.split();
+    let mut broadcast_rx = state.broadcast_tx.subscribe();
+    
+    // Spawn a task to handle incoming messages from this WebSocket connection
+    let broadcast_tx = state.broadcast_tx.clone();
+    let mut redis_conn = state.redis.clone();
+    
+    let recv_task = tokio::spawn(async move {
+        while let Some(msg) = receiver.next().await {
+            if let Ok(msg) = msg {
+                match msg {
+                    Message::Text(text) => {
+                        println!("Received message: {}", text);
+                        
+                        // Try to parse as JSON message
+                        if let Ok(ws_msg) = serde_json::from_str::<WsMessage>(&text) {
+                            // Store message in Redis
+                            let key = format!("message:{}", ws_msg.id);
+                            if let Ok(msg_json) = serde_json::to_string(&ws_msg) {
+                                let _: Result<(), _> = redis::cmd("SET")
+                                    .arg(&key)
+                                    .arg(&msg_json)
+                                    .arg("EX")
+                                    .arg(3600) // Expire after 1 hour
+                                    .query_async(&mut redis_conn)
+                                    .await;
+                            }
+                            
+                            // Broadcast message to all connected clients
+                            let _ = broadcast_tx.send(text);
+                        } else {
+                            // Simple text message - create a WsMessage structure
+                            let ws_msg = WsMessage {
+                                id: Uuid::new_v4().to_string(),
+                                user: "anonymous".to_string(),
+                                message: text,
+                                timestamp: chrono::Utc::now().to_rfc3339(),
+                            };
+                            
+                            if let Ok(msg_json) = serde_json::to_string(&ws_msg) {
+                                // Store in Redis
+                                let key = format!("message:{}", ws_msg.id);
+                                let _: Result<(), _> = redis::cmd("SET")
+                                    .arg(&key)
+                                    .arg(&msg_json)
+                                    .arg("EX")
+                                    .arg(3600)
+                                    .query_async(&mut redis_conn)
+                                    .await;
+                                
+                                // Broadcast to all clients
+                                let _ = broadcast_tx.send(msg_json);
+                            }
+                        }
+                    }
+                    Message::Binary(_) => {
+                        println!("Received binary message");
+                    }
+                    Message::Close(_) => {
+                        println!("WebSocket connection closed");
+                        break;
+                    }
+                    _ => {}
+                }
+            } else {
+                break;
+            }
+        }
+    });
+    
+    // Spawn a task to handle outgoing messages to this WebSocket connection
+    let send_task = tokio::spawn(async move {
+        while let Ok(msg) = broadcast_rx.recv().await {
+            if sender.send(Message::Text(msg)).await.is_err() {
+                break;
+            }
+        }
+    });
+    
+    // Wait for either task to finish
+    tokio::select! {
+        _ = recv_task => {},
+        _ = send_task => {},
     }
 }

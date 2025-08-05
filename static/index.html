@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Chat Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #messages {
+            border: 1px solid #ccc;
+            height: 400px;
+            overflow-y: scroll;
+            padding: 10px;
+            margin-bottom: 20px;
+            background-color: #f9f9f9;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 5px;
+            border-radius: 5px;
+            background-color: white;
+        }
+        .message-header {
+            font-weight: bold;
+            font-size: 0.9em;
+            color: #666;
+        }
+        .message-content {
+            margin-top: 5px;
+        }
+        #messageForm {
+            display: flex;
+            gap: 10px;
+        }
+        #messageInput {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        #sendButton {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #sendButton:hover {
+            background-color: #0056b3;
+        }
+        #sendButton:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        #status {
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Chat Test</h1>
+    
+    <div id="status" class="disconnected">Déconnecté</div>
+    
+    <div id="messages"></div>
+    
+    <form id="messageForm">
+        <input type="text" id="messageInput" placeholder="Tapez votre message..." disabled>
+        <button type="submit" id="sendButton" disabled>Envoyer</button>
+    </form>
+    
+    <script>
+        let ws = null;
+        let isConnected = false;
+        
+        const statusDiv = document.getElementById('status');
+        const messagesDiv = document.getElementById('messages');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const messageForm = document.getElementById('messageForm');
+        
+        function updateStatus(connected) {
+            isConnected = connected;
+            if (connected) {
+                statusDiv.textContent = 'Connecté au WebSocket';
+                statusDiv.className = 'connected';
+                messageInput.disabled = false;
+                sendButton.disabled = false;
+            } else {
+                statusDiv.textContent = 'Déconnecté du WebSocket';
+                statusDiv.className = 'disconnected';
+                messageInput.disabled = true;
+                sendButton.disabled = true;
+            }
+        }
+        
+        function addMessage(user, message, timestamp) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message';
+            
+            const headerDiv = document.createElement('div');
+            headerDiv.className = 'message-header';
+            headerDiv.textContent = `${user} - ${new Date(timestamp).toLocaleString()}`;
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.textContent = message;
+            
+            messageDiv.appendChild(headerDiv);
+            messageDiv.appendChild(contentDiv);
+            messagesDiv.appendChild(messageDiv);
+            
+            // Scroll to bottom
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        function connectWebSocket() {
+            try {
+                ws = new WebSocket('ws://127.0.0.1:3000/ws');
+                
+                ws.onopen = function(event) {
+                    console.log('WebSocket connecté');
+                    updateStatus(true);
+                    addMessage('System', 'Connexion WebSocket établie', new Date().toISOString());
+                };
+                
+                ws.onmessage = function(event) {
+                    console.log('Message reçu:', event.data);
+                    try {
+                        const msg = JSON.parse(event.data);
+                        addMessage(msg.user, msg.message, msg.timestamp);
+                    } catch (e) {
+                        addMessage('Unknown', event.data, new Date().toISOString());
+                    }
+                };
+                
+                ws.onclose = function(event) {
+                    console.log('WebSocket fermé');
+                    updateStatus(false);
+                    addMessage('System', 'Connexion WebSocket fermée', new Date().toISOString());
+                    
+                    // Tentative de reconnexion après 3 secondes
+                    setTimeout(connectWebSocket, 3000);
+                };
+                
+                ws.onerror = function(error) {
+                    console.error('Erreur WebSocket:', error);
+                    addMessage('System', 'Erreur de connexion WebSocket', new Date().toISOString());
+                };
+                
+            } catch (error) {
+                console.error('Erreur lors de la création du WebSocket:', error);
+                updateStatus(false);
+            }
+        }
+        
+        function sendMessage() {
+            if (isConnected && messageInput.value.trim()) {
+                const message = {
+                    id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                    user: 'User',
+                    message: messageInput.value.trim(),
+                    timestamp: new Date().toISOString()
+                };
+                
+                ws.send(JSON.stringify(message));
+                messageInput.value = '';
+            }
+        }
+        
+        messageForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            sendMessage();
+        });
+        
+        messageInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+        
+        // Connexion initiale
+        connectWebSocket();
+        
+        // Ajouter un message de bienvenue
+        addMessage('System', 'Interface de test WebSocket chargée. Connexion en cours...', new Date().toISOString());
+    </script>
+</body>
+</html>
