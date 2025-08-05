@@ -76,13 +76,13 @@ async fn main() {
         .with_state(app_state);
 
     // Run the server
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
         .await
         .unwrap();
     
-    println!("Server running on http://127.0.0.1:3000");
-    println!("WebSocket available at ws://127.0.0.1:3000/ws");
-    println!("Test page available at http://127.0.0.1:3000/static/index.html");
+    println!("Server running on http://0.0.0.0:3000");
+    println!("WebSocket available at ws://0.0.0.0:3000/ws");
+    println!("Test page available at http://0.0.0.0:3000/static/index.html");
     println!("Make sure Valkey/Redis is running on www.goyav.re:6379");
     
     axum::serve(listener, app).await.unwrap();
