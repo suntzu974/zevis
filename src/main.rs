@@ -14,7 +14,7 @@ use uuid::Uuid;
 use tokio::sync::broadcast;
 use futures_util::{SinkExt, StreamExt};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 struct User {
     id: u32,
     name: String,
@@ -38,6 +38,15 @@ struct WsMessage {
     user: String,
     message: String,
     timestamp: String,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct UserNotification {
+    id: String,
+    event_type: String, // "user_created", "user_deleted", etc.
+    user_data: User,
+    timestamp: String,
+    message: String,
 }
 
 // Application state containing Valkey connection and broadcast channel
@@ -202,8 +211,8 @@ async fn create_user(State(state): State<AppState>, Json(payload): Json<CreateUs
     
     let user = User {
         id: new_id,
-        name: payload.name,
-        email: payload.email,
+        name: payload.name.clone(),
+        email: payload.email.clone(),
     };
     
     // Store user in Redis
@@ -215,7 +224,23 @@ async fn create_user(State(state): State<AppState>, Json(payload): Json<CreateUs
                 .query_async::<_, ()>(&mut conn)
                 .await 
             {
-                Ok(_) => Ok(Json(user)),
+                Ok(_) => {
+                    // Create notification for WebSocket
+                    let notification = UserNotification {
+                        id: Uuid::new_v4().to_string(),
+                        event_type: "user_created".to_string(),
+                        user_data: user.clone(),
+                        timestamp: chrono::Utc::now().to_rfc3339(),
+                        message: format!("Nouvel utilisateur créé: {} ({})", user.name, user.email),
+                    };
+                    
+                    // Send notification via WebSocket
+                    if let Ok(notification_json) = serde_json::to_string(&notification) {
+                        let _ = state.broadcast_tx.send(notification_json);
+                    }
+                    
+                    Ok(Json(user))
+                },
                 Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
             }
         }
@@ -226,6 +251,16 @@ async fn create_user(State(state): State<AppState>, Json(payload): Json<CreateUs
 async fn delete_user(axum::extract::Path(id): axum::extract::Path<u32>, State(state): State<AppState>) -> Result<StatusCode, StatusCode> {
     let mut conn = state.redis.clone();
     
+    // Get user data before deletion for notification
+    let user_data = match redis::cmd("GET")
+        .arg(format!("user:{}", id))
+        .query_async::<_, String>(&mut conn)
+        .await 
+    {
+        Ok(user_json) => serde_json::from_str::<User>(&user_json).ok(),
+        Err(_) => None,
+    };
+    
     match redis::cmd("DEL")
         .arg(format!("user:{}", id))
         .query_async::<_, i32>(&mut conn)
@@ -233,6 +268,22 @@ async fn delete_user(axum::extract::Path(id): axum::extract::Path<u32>, State(st
     {
         Ok(deleted_count) => {
             if deleted_count > 0 {
+                // Send notification if we have user data
+                if let Some(user) = user_data {
+                    let notification = UserNotification {
+                        id: Uuid::new_v4().to_string(),
+                        event_type: "user_deleted".to_string(),
+                        user_data: user.clone(),
+                        timestamp: chrono::Utc::now().to_rfc3339(),
+                        message: format!("Utilisateur supprimé: {} ({})", user.name, user.email),
+                    };
+                    
+                    // Send notification via WebSocket
+                    if let Ok(notification_json) = serde_json::to_string(&notification) {
+                        let _ = state.broadcast_tx.send(notification_json);
+                    }
+                }
+                
                 Ok(StatusCode::NO_CONTENT)
             } else {
                 Err(StatusCode::NOT_FOUND)

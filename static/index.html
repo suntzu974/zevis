@@ -25,6 +25,18 @@
             border-radius: 5px;
             background-color: white;
         }
+        .message.notification {
+            background-color: #e7f3ff;
+            border-left: 4px solid #007bff;
+        }
+        .message.user-created {
+            background-color: #d4edda;
+            border-left: 4px solid #28a745;
+        }
+        .message.user-deleted {
+            background-color: #f8d7da;
+            border-left: 4px solid #dc3545;
+        }
         .message-header {
             font-weight: bold;
             font-size: 0.9em;
@@ -86,6 +98,20 @@
         <button type="submit" id="sendButton" disabled>Envoyer</button>
     </form>
     
+    <div style="margin-top: 30px; padding: 20px; border: 1px solid #ddd; border-radius: 5px; background-color: #f8f9fa;">
+        <h3>Test des notifications utilisateur</h3>
+        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+            <input type="text" id="userNameInput" placeholder="Nom de l'utilisateur" style="flex: 1; padding: 8px;">
+            <input type="email" id="userEmailInput" placeholder="Email de l'utilisateur" style="flex: 1; padding: 8px;">
+            <button onclick="createUser()" style="padding: 8px 15px; background-color: #28a745; color: white; border: none; border-radius: 3px;">Créer utilisateur</button>
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <input type="number" id="userIdInput" placeholder="ID utilisateur" style="flex: 1; padding: 8px;">
+            <button onclick="deleteUser()" style="padding: 8px 15px; background-color: #dc3545; color: white; border: none; border-radius: 3px;">Supprimer utilisateur</button>
+            <button onclick="getUsers()" style="padding: 8px 15px; background-color: #6c757d; color: white; border: none; border-radius: 3px;">Lister utilisateurs</button>
+        </div>
+    </div>
+    
     <script>
         let ws = null;
         let isConnected = false;
@@ -111,9 +137,19 @@
             }
         }
         
-        function addMessage(user, message, timestamp) {
+        function addMessage(user, message, timestamp, eventType = null) {
             const messageDiv = document.createElement('div');
             messageDiv.className = 'message';
+            
+            // Add special styling for notifications
+            if (eventType) {
+                messageDiv.classList.add('notification');
+                if (eventType === 'user_created') {
+                    messageDiv.classList.add('user-created');
+                } else if (eventType === 'user_deleted') {
+                    messageDiv.classList.add('user-deleted');
+                }
+            }
             
             const headerDiv = document.createElement('div');
             headerDiv.className = 'message-header';
@@ -144,9 +180,26 @@
                 ws.onmessage = function(event) {
                     console.log('Message reçu:', event.data);
                     try {
-                        const msg = JSON.parse(event.data);
-                        addMessage(msg.user, msg.message, msg.timestamp);
+                        const data = JSON.parse(event.data);
+                        
+                        // Check if it's a user notification
+                        if (data.event_type && data.user_data) {
+                            // It's a user notification
+                            addMessage(
+                                'System', 
+                                data.message, 
+                                data.timestamp, 
+                                data.event_type
+                            );
+                        } else if (data.user && data.message) {
+                            // It's a regular chat message
+                            addMessage(data.user, data.message, data.timestamp);
+                        } else {
+                            // Fallback for unknown format
+                            addMessage('Unknown', JSON.stringify(data), new Date().toISOString());
+                        }
                     } catch (e) {
+                        // Plain text message
                         addMessage('Unknown', event.data, new Date().toISOString());
                     }
                 };
@@ -202,6 +255,89 @@
         
         // Ajouter un message de bienvenue
         addMessage('System', 'Interface de test WebSocket chargée. Connexion en cours...', new Date().toISOString());
+        
+        // Functions for user management
+        async function createUser() {
+            const name = document.getElementById('userNameInput').value.trim();
+            const email = document.getElementById('userEmailInput').value.trim();
+            
+            if (!name || !email) {
+                alert('Veuillez remplir le nom et l\'email');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/users', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ name, email })
+                });
+                
+                if (response.ok) {
+                    const user = await response.json();
+                    console.log('Utilisateur créé:', user);
+                    // Clear inputs
+                    document.getElementById('userNameInput').value = '';
+                    document.getElementById('userEmailInput').value = '';
+                } else {
+                    console.error('Erreur lors de la création:', response.status);
+                    alert('Erreur lors de la création de l\'utilisateur');
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                alert('Erreur de connexion');
+            }
+        }
+        
+        async function deleteUser() {
+            const id = document.getElementById('userIdInput').value.trim();
+            
+            if (!id) {
+                alert('Veuillez entrer un ID utilisateur');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/users/${id}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    console.log('Utilisateur supprimé');
+                    document.getElementById('userIdInput').value = '';
+                } else if (response.status === 404) {
+                    alert('Utilisateur non trouvé');
+                } else {
+                    console.error('Erreur lors de la suppression:', response.status);
+                    alert('Erreur lors de la suppression de l\'utilisateur');
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                alert('Erreur de connexion');
+            }
+        }
+        
+        async function getUsers() {
+            try {
+                const response = await fetch('/users');
+                if (response.ok) {
+                    const users = await response.json();
+                    console.log('Utilisateurs:', users);
+                    
+                    // Display users in chat
+                    const usersList = users.map(u => `${u.id}: ${u.name} (${u.email})`).join(', ');
+                    addMessage('System', `Utilisateurs actuels: ${usersList}`, new Date().toISOString());
+                } else {
+                    console.error('Erreur lors de la récupération:', response.status);
+                    alert('Erreur lors de la récupération des utilisateurs');
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                alert('Erreur de connexion');
+            }
+        }
     </script>
 </body>
 </html>
