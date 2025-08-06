@@ -17,3 +17,5 @@ tokio-tungstenite = "0.21"
 futures-util = "0.3"
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid"] }
 dotenv = "0.15"
+thiserror = "2.0"
+async-trait = "0.1"

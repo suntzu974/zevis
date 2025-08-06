@@ -2600,6 +2600,7 @@ dependencies = [
 name = "zevis"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "axum",
  "chrono",
  "dotenv",
@@ -2608,6 +2609,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx",
+ "thiserror 2.0.12",
  "tokio",
  "tokio-tungstenite 0.21.0",
  "tower 0.4.13",
