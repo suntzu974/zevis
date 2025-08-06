@@ -67,7 +67,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .route("/ws", get(websocket_handler))
         .nest_service("/static", ServeDir::new("static"))
-        .nest_service("/notifications", ServeDir::new("yew-ws/dist")) // WebSocket notifications frontend
+        .nest_service("/notifications", ServeDir::new("yew-ws/dist")) // Yew WebSocket notifications frontend
+        .nest_service("/react", ServeDir::new("react-ws/build")) // React WebSocket notifications frontend
         .layer(ServiceBuilder::new())
         .with_state(app_state);
     
@@ -78,8 +79,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🚀 Server running on http://{}", addr);
     println!("📡 WebSocket available at ws://{}/ws", addr);
     println!("🌐 Test page available at http://{}/static/index.html", addr);
-    println!("� WebSocket notifications frontend at http://{}/notifications/", addr);
-    println!("�🗄️ PostgreSQL database connected");
+    println!("🦀 Yew WebSocket notifications frontend at http://{}/notifications/", addr);
+    println!("⚛️ React WebSocket notifications frontend at http://{}/react/", addr);
+    println!("🗄️ PostgreSQL database connected");
     println!("🔄 Redis connected for WebSocket broadcasting");
     
     axum::serve(listener, app).await?;

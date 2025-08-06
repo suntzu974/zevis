@@ -1,2 +1,15 @@
 /target
 /yew-rs/target
+/yew-ws/target
+/yew-ws/dist
+
+# React
+/react-ws/node_modules
+/react-ws/build
+/react-ws/.env.local
+/react-ws/.env.development.local
+/react-ws/.env.test.local
+/react-ws/.env.production.local
+/react-ws/npm-debug.log*
+/react-ws/yarn-debug.log*
+/react-ws/yarn-error.log*
