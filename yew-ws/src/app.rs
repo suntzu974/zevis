@@ -53,7 +53,7 @@ pub fn notification_app() -> Html {
     html! {
         <div class="notification-app">
             <header class="header">
-                <h1>{"🔔 WebSocket Notifications"}</h1>
+                <h1>{"🔔 WebSocket Notifications - Yew"}</h1>
                 <div class="controls">
                     <div class={format!("status {}", if *connected { "connected" } else { "disconnected" })}>
                         {if *connected { "🟢 Connected" } else { "🔴 Disconnected" }}

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use axum::extract::{Path, Query, State};
 use axum::Json;
+use axum::response::Html;
 use serde_json::json;
 use tokio::sync::broadcast;
 
@@ -91,4 +92,18 @@ pub async fn delete_cache(
 ) -> Result<&'static str> {
     state.cache_service.delete_cache_value(&key).await?;
     Ok("Cache value deleted successfully")
+}
+
+// Yew SPA Handler - serves index.html for all routes with corrected asset paths
+pub async fn serve_yew_spa() -> Html<String> {
+    match tokio::fs::read_to_string("yew-ws/dist/index.html").await {
+        Ok(content) => {
+            // Replace absolute paths with /yew-assets/ paths
+            let corrected_content = content
+                .replace("href=\"/yew-ws-notifications-", "href=\"/yew-assets/yew-ws-notifications-")
+                .replace("src=\"/yew-ws-notifications-", "src=\"/yew-assets/yew-ws-notifications-");
+            Html(corrected_content)
+        },
+        Err(_) => Html("<html><body><h1>Yew app not found</h1><p>Please build the Yew app first with <code>trunk build --release</code></p></body></html>".to_string()),
+    }
 }

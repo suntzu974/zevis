@@ -1,98 +1,71 @@
-# WebSocket Notifications Frontend 🔔
+# Yew WebSocket Notifications
 
-Frontend Yew minimal pour afficher les notifications WebSocket en temps réel.
+Cette application Yew affiche en temps réel les notifications reçues via WebSocket depuis le serveur Zevis.
 
-## 🚀 Démarrage Rapide
+## Fonctionnalités
 
-### 1. Construire le frontend
+- 🔄 Connexion automatique au WebSocket
+- 📱 Interface responsive
+- 🎨 Design moderne avec dégradés
+- 🔄 Reconnexion automatique en cas de perte de connexion
+- 🗑️ Possibilité de vider l'historique des messages
+- 📊 Affichage du statut de connexion
+
+## Build et déploiement
+
+### Prérequis
+
+- Rust avec `wasm32-unknown-unknown` target
+- Trunk (installé automatiquement par les scripts de build)
+
 ```bash
-cd yew-ws
-cargo install trunk
+# Installer le target wasm
 rustup target add wasm32-unknown-unknown
-trunk build --release
 ```
 
-### 2. Ou utiliser le script
+### Build automatique
+
 ```bash
 # Windows
-./build-notifications.bat
+./build-yew.bat
 
-# Linux/macOS  
-chmod +x build-notifications.sh && ./build-notifications.sh
+# Unix/Linux/macOS
+./build-yew.sh
 ```
 
-### 3. Démarrer le backend
-```bash
-# Depuis la racine du projet
-cargo run
-```
-
-### 4. Accéder au frontend
-- **Frontend notifications**: http://localhost:3000/notifications/
-- **WebSocket endpoint**: ws://localhost:3000/ws
-
-## ✨ Fonctionnalités
-
-### Notifications en temps réel
-- ✅ **Notifications d'utilisateurs** : Création/suppression d'utilisateurs
-- ✅ **Messages WebSocket** : Messages chat/génériques  
-- ✅ **Messages système** : Connexion/déconnexion/erreurs
-- ✅ **Auto-reconnexion** : Reconnexion automatique en cas de perte
-- ✅ **Historique** : Affichage des 100 derniers messages
-- ✅ **Design responsive** : Interface adaptative mobile/desktop
-
-### Interface utilisateur
-- 🎨 **Design moderne** avec dégradés et animations
-- 🔄 **Statut de connexion** en temps réel  
-- 🕒 **Timestamps** formatés
-- 🗑️ **Effacement** de l'historique
-- ⚙️ **Toggle auto-reconnexion**
-
-### Types de notifications
-1. **👤➕ User Created** - Nouvel utilisateur créé
-2. **👤🗑️ User Deleted** - Utilisateur supprimé  
-3. **💬 Message** - Message WebSocket générique
-4. **🟢 Connected** - Connexion établie
-5. **🔴 Disconnected** - Connexion perdue
-6. **❌ Error** - Erreur de connexion
-
-## 🧪 Test
-
-Pour tester les notifications :
-
-1. **Démarrer le frontend notifications**
-2. **Depuis une autre fenêtre**, utiliser l'API REST :
+### Build manuel
 
 ```bash
-# Créer un utilisateur (génère une notification)
-curl -X POST http://localhost:3000/users \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Test User","email":"test@example.com"}'
-
-# Supprimer un utilisateur (génère une notification)  
-curl -X DELETE http://localhost:3000/users/1
+cd yew-ws
+trunk build --release --dist dist
 ```
 
-Les notifications apparaîtront instantanément dans le frontend !
+### Développement
 
-## 🏗️ Architecture
+Pour le développement avec rechargement automatique :
 
-```
-yew-ws/
-├── src/
-│   ├── lib.rs          # Point d'entrée
-│   ├── app.rs          # Composant principal  
-│   ├── models.rs       # Modèles de données
-│   └── websocket.rs    # Service WebSocket (optionnel)
-├── index.html          # Template HTML + CSS
-├── Cargo.toml          # Dépendances Yew
-└── dist/               # Build de production
+```bash
+cd yew-ws
+trunk serve --open
 ```
 
-## 🎨 Personnalisation
+## Utilisation
 
-Le CSS est intégré dans `index.html` pour faciliter la customisation :
-- **Couleurs** : Modifiez les gradients CSS
-- **Animations** : Ajustez les transitions et keyframes  
-- **Layout** : Changez la disposition responsive
-- **Thème** : Créez vos propres styles de messages
+1. Lancez le serveur Zevis principal
+2. Buildez l'application Yew avec les scripts fournis
+3. Accédez à `http://localhost:3000/yew/`
+4. L'application se connecte automatiquement au WebSocket sur `ws://localhost:3000/ws`
+
+## Structure
+
+- `src/app.rs` - Composant principal avec logique WebSocket
+- `src/models.rs` - Structures de données pour les notifications
+- `src/lib.rs` - Point d'entrée de l'application
+- `dist/` - Fichiers générés (HTML, JS, WASM)
+
+## Types de notifications supportés
+
+- **User Created** - Notification de création d'utilisateur
+- **User Deleted** - Notification de suppression d'utilisateur
+- **WebSocket Messages** - Messages génériques via WebSocket
+- **System Messages** - Messages de connexion/déconnexion/erreurs

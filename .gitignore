@@ -1,6 +1,9 @@
 /target
 /yew-rs/target
-/yew-ws/dist
+/yew-ws/target
+/yew-ws/dist/*.js
+/yew-ws/dist/*.wasm
+/yew-ws/dist/.stage
 /.git
 # React
 /react-ws/node_modules

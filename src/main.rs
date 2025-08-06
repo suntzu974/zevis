@@ -5,7 +5,7 @@ use axum::{
 };
 use tokio::sync::broadcast;
 use tower::ServiceBuilder;
-use tower_http::services::ServeDir;
+use tower_http::services::{ServeDir, ServeFile};
 
 // Import our modules
 use zevis::{
@@ -67,8 +67,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .route("/ws", get(websocket_handler))
         .nest_service("/static", ServeDir::new("static"))
-        .nest_service("/notifications", ServeDir::new("yew-ws/dist")) // Yew WebSocket notifications frontend
         .nest_service("/react", ServeDir::new("react-ws/build")) // React WebSocket notifications frontend
+        .nest_service(
+            "/yew",
+            ServeDir::new("yew-ws/dist").not_found_service(ServeFile::new("yew-ws/dist/index.html"))
+        ) // Yew WebSocket notifications frontend with SPA fallback
         .layer(ServiceBuilder::new())
         .with_state(app_state);
     
@@ -79,8 +82,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🚀 Server running on http://{}", addr);
     println!("📡 WebSocket available at ws://{}/ws", addr);
     println!("🌐 Test page available at http://{}/static/index.html", addr);
-    println!("🦀 Yew WebSocket notifications frontend at http://{}/notifications/", addr);
     println!("⚛️ React WebSocket notifications frontend at http://{}/react/", addr);
+    println!("🦀 Yew WebSocket notifications frontend at http://{}/yew/", addr);
     println!("🗄️ PostgreSQL database connected");
     println!("🔄 Redis connected for WebSocket broadcasting");
     

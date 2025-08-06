@@ -1,37 +1,42 @@
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct User {
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct UserData {
     pub id: i32,
     pub name: String,
     pub email: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct UserNotification {
+    pub event_type: String,
+    pub message: String,
+    pub user_data: UserData,
+    pub timestamp: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct WsMessage {
-    pub id: String,
     pub user: String,
     pub message: String,
     pub timestamp: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct UserNotification {
-    pub id: String,
-    pub event_type: String,
-    pub user_data: User,
-    pub timestamp: String,
-    pub message: String,
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum NotificationMessage {
-    WsMessage(WsMessage),
     UserNotification(UserNotification),
+    WsMessage(WsMessage),
     Connected,
     Disconnected,
     Error(String),
+}
+
+impl NotificationMessage {
+    pub fn get_timestamp(&self) -> String {
+        match self {
+            NotificationMessage::UserNotification(notif) => notif.timestamp.clone(),
+            NotificationMessage::WsMessage(msg) => msg.timestamp.clone(),
+            _ => chrono::Utc::now().to_rfc3339(),
+        }
+    }
 }

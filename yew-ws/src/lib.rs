@@ -1,10 +1,11 @@
 mod models;
-mod websocket;
 mod app;
 
 use app::NotificationApp;
+use wasm_bindgen::prelude::*;
 
-fn main() {
+#[wasm_bindgen(start)]
+pub fn main() {
     // Initialize console logging
     console_log::init_with_level(log::Level::Info).expect("Failed to initialize logger");
     
