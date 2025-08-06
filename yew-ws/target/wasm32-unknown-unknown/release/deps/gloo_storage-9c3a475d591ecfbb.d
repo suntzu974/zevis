@@ -1,0 +1,10 @@
+C:\Users\jeann\source\Rust\zevis\yew-ws\target\wasm32-unknown-unknown\release\deps\libgloo_storage-9c3a475d591ecfbb.rmeta: C:\Users\jeann\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gloo-storage-0.2.2\src\lib.rs C:\Users\jeann\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gloo-storage-0.2.2\src\errors.rs C:\Users\jeann\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gloo-storage-0.2.2\src\local_storage.rs C:\Users\jeann\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gloo-storage-0.2.2\src\session_storage.rs
+
+C:\Users\jeann\source\Rust\zevis\yew-ws\target\wasm32-unknown-unknown\release\deps\libgloo_storage-9c3a475d591ecfbb.rlib: C:\Users\jeann\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gloo-storage-0.2.2\src\lib.rs C:\Users\jeann\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gloo-storage-0.2.2\src\errors.rs C:\Users\jeann\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gloo-storage-0.2.2\src\local_storage.rs C:\Users\jeann\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gloo-storage-0.2.2\src\session_storage.rs
+
+C:\Users\jeann\source\Rust\zevis\yew-ws\target\wasm32-unknown-unknown\release\deps\gloo_storage-9c3a475d591ecfbb.d: C:\Users\jeann\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gloo-storage-0.2.2\src\lib.rs C:\Users\jeann\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gloo-storage-0.2.2\src\errors.rs C:\Users\jeann\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gloo-storage-0.2.2\src\local_storage.rs C:\Users\jeann\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gloo-storage-0.2.2\src\session_storage.rs
+
+C:\Users\jeann\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gloo-storage-0.2.2\src\lib.rs:
+C:\Users\jeann\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gloo-storage-0.2.2\src\errors.rs:
+C:\Users\jeann\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gloo-storage-0.2.2\src\local_storage.rs:
+C:\Users\jeann\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gloo-storage-0.2.2\src\session_storage.rs:

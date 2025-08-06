@@ -1,0 +1,1 @@
+C:\Users\jeann\source\Rust\zevis\yew-ws\target\wasm32-unknown-unknown\debug\yew_websocket_notifications.wasm: C:\Users\jeann\source\Rust\zevis\yew-ws\src\app.rs C:\Users\jeann\source\Rust\zevis\yew-ws\src\lib.rs C:\Users\jeann\source\Rust\zevis\yew-ws\src\models.rs C:\Users\jeann\source\Rust\zevis\yew-ws\src\websocket.rs

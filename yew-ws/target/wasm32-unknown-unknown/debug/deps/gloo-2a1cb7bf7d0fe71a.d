@@ -1,0 +1,7 @@
+C:\Users\jeann\source\Rust\zevis\yew-ws\target\wasm32-unknown-unknown\debug\deps\libgloo-2a1cb7bf7d0fe71a.rmeta: C:\Users\jeann\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gloo-0.11.0\src\lib.rs
+
+C:\Users\jeann\source\Rust\zevis\yew-ws\target\wasm32-unknown-unknown\debug\deps\libgloo-2a1cb7bf7d0fe71a.rlib: C:\Users\jeann\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gloo-0.11.0\src\lib.rs
+
+C:\Users\jeann\source\Rust\zevis\yew-ws\target\wasm32-unknown-unknown\debug\deps\gloo-2a1cb7bf7d0fe71a.d: C:\Users\jeann\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gloo-0.11.0\src\lib.rs
+
+C:\Users\jeann\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\gloo-0.11.0\src\lib.rs:

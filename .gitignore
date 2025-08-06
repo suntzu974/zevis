@@ -1,7 +1,7 @@
 /target
 /yew-rs/target
 /yew-ws/dist
-
+/.git
 # React
 /react-ws/node_modules
 /react-ws/build
