@@ -1,0 +1,1 @@
+F:\zevis\yew-ws\target\wasm32-unknown-unknown\release\yew_websocket_notifications.wasm: F:\zevis\yew-ws\src\app.rs F:\zevis\yew-ws\src\lib.rs F:\zevis\yew-ws\src\models.rs F:\zevis\yew-ws\src\websocket.rs
