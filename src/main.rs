@@ -58,9 +58,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new()
         .route("/", get(handlers::hello_world))
         .route("/users", get(handlers::get_users).post(handlers::create_user))
-        .route("/users/:id", get(handlers::get_user).delete(handlers::delete_user))
+        .route("/users/{id}", get(handlers::get_user).delete(handlers::delete_user))
         .route("/health", get(handlers::health_check))
-        .route("/cache/:key", 
+        .route("/cache/{key}", 
             get(handlers::get_cache)
                 .post(handlers::set_cache)
                 .delete(handlers::delete_cache)

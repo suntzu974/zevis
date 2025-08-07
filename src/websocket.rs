@@ -39,7 +39,7 @@ pub async fn websocket_connection(socket: WebSocket, state: AppState) {
     // Handle outgoing messages
     let send_task = tokio::spawn(async move {
         while let Ok(msg) = broadcast_rx.recv().await {
-            if sender.send(Message::Text(msg)).await.is_err() {
+            if sender.send(Message::Text(msg.into())).await.is_err() {
                 break;
             }
         }
@@ -67,7 +67,7 @@ async fn handle_websocket_message(
                 WsMessage {
                     id: Uuid::new_v4().to_string(),
                     user: "anonymous".to_string(),
-                    message: text,
+                    message: text.to_string(),
                     timestamp: chrono::Utc::now().to_rfc3339(),
                 }
             };
