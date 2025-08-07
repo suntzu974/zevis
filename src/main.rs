@@ -54,6 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         broadcast_tx,
     };
     
+    let static_files = ServeDir::new("./public");
     // Build router
     let app = Router::new()
         .route("/", get(handlers::hello_world))
@@ -67,11 +68,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .route("/ws", get(websocket_handler))
         .nest_service("/static", ServeDir::new("static"))
-        .nest_service("/react", ServeDir::new("react-ws/build")) // React WebSocket notifications frontend
-        .nest_service(
-            "/yew",
-            ServeDir::new("yew-ws/dist").not_found_service(ServeFile::new("yew-ws/dist/index.html"))
-        ) // Yew WebSocket notifications frontend with SPA fallback
+        .fallback_service(
+            static_files
+                .clone()
+                .not_found_service(ServeFile::new("./public/index.html")), ) // Yew WebSocket notifications frontend with SPA fallback
         .layer(ServiceBuilder::new())
         .with_state(app_state);
     
