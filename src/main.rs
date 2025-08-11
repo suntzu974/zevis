@@ -15,6 +15,7 @@ use zevis::{
     repositories::{PostgresUserRepository, RedisCacheRepository, PostgresEventRepository},
     services::{UserServiceImpl, CacheServiceImpl, NotificationServiceImpl},
     websocket::websocket_handler,
+    middleware::{cors_layer},
 };
 
 #[tokio::main]
@@ -55,24 +56,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     
     let static_files = ServeDir::new("./public");
-    // Build router
-    let app = Router::new()
+    
+    // Public routes (no authentication required)
+    let public_routes = Router::new()
         .route("/", get(handlers::hello_world))
+        .route("/health", get(handlers::health_check))
+        .route("/ws", get(websocket_handler))
+        .nest_service("/static", ServeDir::new("static"));
+
+    // Authentication routes
+    let auth_routes = Router::new()
+        .route("/auth/register", post(handlers::auth::register))
+        .route("/auth/login", post(handlers::auth::login))
+        .with_state(app_state.clone());
+
+    // Protected routes (require authentication)
+    let protected_routes = Router::new()
+        .route("/auth/me", get(handlers::auth::me))
+        .route("/auth/protected", get(handlers::auth::protected))
         .route("/users", get(handlers::get_users).post(handlers::create_user))
         .route("/users/{id}", get(handlers::get_user).delete(handlers::delete_user))
-        .route("/health", get(handlers::health_check))
         .route("/cache/{key}", 
             get(handlers::get_cache)
                 .post(handlers::set_cache)
                 .delete(handlers::delete_cache)
         )
-        .route("/ws", get(websocket_handler))
-        .nest_service("/static", ServeDir::new("static"))
+        .with_state(app_state.clone());
+
+    // Build main router with all middlewares
+    let app = Router::new()
+        .merge(public_routes)
+        .merge(auth_routes)
+        .merge(protected_routes)
         .fallback_service(
             static_files
                 .clone()
-                .not_found_service(ServeFile::new("./public/index.html")), ) // Yew WebSocket notifications frontend with SPA fallback
-        .layer(ServiceBuilder::new())
+                .not_found_service(ServeFile::new("./public/index.html"))
+        )
+        .layer(
+            ServiceBuilder::new()
+                .layer(cors_layer()) // CORS support
+        )
         .with_state(app_state);
     
     // Start server
@@ -84,8 +108,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🌐 Test page available at http://{}/static/index.html", addr);
     println!("⚛️ React WebSocket notifications frontend at http://{}/react/", addr);
     println!("🦀 Yew WebSocket notifications frontend at http://{}/yew/", addr);
-    println!("🗄️ PostgreSQL database connected");
+    println!("� Authentication endpoints:");
+    println!("   - POST http://{}/auth/register", addr);
+    println!("   - POST http://{}/auth/login", addr);
+    println!("   - GET http://{}/auth/me (requires JWT)", addr);
+    println!("   - GET http://{}/auth/protected (requires JWT)", addr);
+    println!("�🗄️ PostgreSQL database connected");
     println!("🔄 Redis connected for WebSocket broadcasting");
+    println!("🛡️ CORS and rate limiting enabled");
     
     axum::serve(listener, app).await?;
     

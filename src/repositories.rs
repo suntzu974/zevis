@@ -9,7 +9,9 @@ use crate::errors::{AppError, Result};
 pub trait UserRepository: Send + Sync {
     async fn find_all(&self) -> Result<Vec<User>>;
     async fn find_by_id(&self, id: i32) -> Result<Option<User>>;
+    async fn find_by_email(&self, email: &str) -> Result<Option<User>>;
     async fn create(&self, request: CreateUserRequest) -> Result<User>;
+    async fn create_with_password(&self, user: User) -> Result<User>;
     async fn delete(&self, id: i32) -> Result<Option<User>>;
 }
 
@@ -42,7 +44,7 @@ impl PostgresUserRepository {
 impl UserRepository for PostgresUserRepository {
     async fn find_all(&self) -> Result<Vec<User>> {
         let users = sqlx::query_as::<_, User>(
-            "SELECT id, name, email, created_at, updated_at FROM users ORDER BY created_at DESC"
+            "SELECT id, name, email, password_hash, created_at, updated_at FROM users ORDER BY created_at DESC"
         )
         .fetch_all(&self.pool)
         .await
@@ -53,7 +55,7 @@ impl UserRepository for PostgresUserRepository {
 
     async fn find_by_id(&self, id: i32) -> Result<Option<User>> {
         let user = sqlx::query_as::<_, User>(
-            "SELECT id, name, email, created_at, updated_at FROM users WHERE id = $1"
+            "SELECT id, name, email, password_hash, created_at, updated_at FROM users WHERE id = $1"
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -63,9 +65,21 @@ impl UserRepository for PostgresUserRepository {
         Ok(user)
     }
 
+    async fn find_by_email(&self, email: &str) -> Result<Option<User>> {
+        let user = sqlx::query_as::<_, User>(
+            "SELECT id, name, email, password_hash, created_at, updated_at FROM users WHERE email = $1"
+        )
+        .bind(email)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(AppError::Database)?;
+        
+        Ok(user)
+    }
+
     async fn create(&self, request: CreateUserRequest) -> Result<User> {
         let user = sqlx::query_as::<_, User>(
-            "INSERT INTO users (name, email) VALUES ($1, $2) RETURNING id, name, email, created_at, updated_at"
+            "INSERT INTO users (name, email) VALUES ($1, $2) RETURNING id, name, email, password_hash, created_at, updated_at"
         )
         .bind(&request.name)
         .bind(&request.email)
@@ -79,6 +93,25 @@ impl UserRepository for PostgresUserRepository {
         })?;
         
         Ok(user)
+    }
+
+    async fn create_with_password(&self, user: User) -> Result<User> {
+        let created_user = sqlx::query_as::<_, User>(
+            "INSERT INTO users (name, email, password_hash) VALUES ($1, $2, $3) RETURNING id, name, email, password_hash, created_at, updated_at"
+        )
+        .bind(&user.name)
+        .bind(&user.email)
+        .bind(&user.password_hash)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::Database(db_err) if db_err.constraint() == Some("users_email_key") => {
+                AppError::EmailConflict
+            }
+            _ => AppError::Database(e),
+        })?;
+        
+        Ok(created_user)
     }
 
     async fn delete(&self, id: i32) -> Result<Option<User>> {

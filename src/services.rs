@@ -10,7 +10,9 @@ use crate::errors::{AppError, Result};
 pub trait UserService: Send + Sync {
     async fn get_all_users(&self) -> Result<Vec<User>>;
     async fn get_user_by_id(&self, id: i32) -> Result<User>;
+    async fn get_user_by_email(&self, email: &str) -> Result<User>;
     async fn create_user(&self, request: CreateUserRequest) -> Result<User>;
+    async fn create_user_with_password(&self, user: User) -> Result<User>;
     async fn delete_user(&self, id: i32) -> Result<()>;
 }
 
@@ -61,6 +63,13 @@ impl UserService for UserServiceImpl {
         }
     }
 
+    async fn get_user_by_email(&self, email: &str) -> Result<User> {
+        match self.user_repo.find_by_email(email).await? {
+            Some(user) => Ok(user),
+            None => Err(AppError::UserNotFound),
+        }
+    }
+
     async fn create_user(&self, request: CreateUserRequest) -> Result<User> {
         let user = self.user_repo.create(request).await?;
         
@@ -70,6 +79,17 @@ impl UserService for UserServiceImpl {
         }
         
         Ok(user)
+    }
+
+    async fn create_user_with_password(&self, user: User) -> Result<User> {
+        let created_user = self.user_repo.create_with_password(user).await?;
+        
+        // Notify about user creation
+        if let Err(e) = self.notification_service.notify_user_created(&created_user).await {
+            eprintln!("Failed to send notification: {}", e);
+        }
+        
+        Ok(created_user)
     }
 
     async fn delete_user(&self, id: i32) -> Result<()> {

@@ -7,6 +7,8 @@ pub struct User {
     pub id: i32,
     pub name: String,
     pub email: String,
+    #[serde(skip_serializing)] // Don't include password hash in JSON responses
+    pub password_hash: Option<String>,
     #[serde(with = "chrono::serde::ts_seconds")]
     pub created_at: chrono::DateTime<chrono::Utc>,
     #[serde(with = "chrono::serde::ts_seconds")]
