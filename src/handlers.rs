@@ -7,7 +7,7 @@ use tokio::sync::broadcast;
 
 use crate::models::{CreateUserRequest, CacheValue, QueryParams};
 use crate::services::{UserService, CacheService};
-use crate::errors::Result;
+use crate::errors::{Result, AppError};
 
 // Application State (Dependency Injection Container)
 #[derive(Clone)]
@@ -57,6 +57,12 @@ pub async fn create_user(
     State(state): State<AppState>,
     Json(payload): Json<CreateUserRequest>,
 ) -> Result<Json<crate::models::User>> {
+    // Validate with validator crate
+    validator::Validate::validate(&payload).map_err(AppError::ValidationError)?;
+    
+    // Validate with garde crate (alternative validation)
+    garde::Validate::validate(&payload).map_err(AppError::GardeValidation)?;
+    
     let user = state.user_service.create_user(payload).await?;
     Ok(Json(user))
 }
@@ -82,6 +88,12 @@ pub async fn set_cache(
     State(state): State<AppState>,
     Json(payload): Json<CacheValue>,
 ) -> Result<&'static str> {
+    // Validate with validator crate
+    validator::Validate::validate(&payload).map_err(AppError::ValidationError)?;
+    
+    // Validate with garde crate
+    garde::Validate::validate(&payload).map_err(AppError::GardeValidation)?;
+    
     state.cache_service.set_cache_value(&key, payload).await?;
     Ok("Cache value set successfully")
 }

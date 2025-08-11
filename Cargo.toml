@@ -19,3 +19,7 @@ sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "chron
 dotenv = "0.15"
 thiserror = "2.0"
 async-trait = "0.1"
+
+# Validation dependencies
+validator = { version = "0.18", features = ["derive"] }
+garde = { version = "0.20", features = ["derive", "email"] }
