@@ -9,8 +9,11 @@ use crate::errors::{AppError, Result};
 pub trait UserRepository: Send + Sync {
     async fn find_all(&self) -> Result<Vec<User>>;
     async fn find_by_id(&self, id: i32) -> Result<Option<User>>;
+    async fn find_by_email(&self, email: &str) -> Result<Option<User>>;
     async fn create(&self, request: CreateUserRequest) -> Result<User>;
     async fn delete(&self, id: i32) -> Result<Option<User>>;
+    async fn find_password_hash_by_email(&self, email: &str) -> Result<Option<(i32, String)>>;
+    async fn create_with_password(&self, name: &str, email: &str, password_hash: &str) -> Result<User>;
 }
 
 // Cache Repository Interface
@@ -63,6 +66,17 @@ impl UserRepository for PostgresUserRepository {
         Ok(user)
     }
 
+    async fn find_by_email(&self, email: &str) -> Result<Option<User>> {
+        let user = sqlx::query_as::<_, User>(
+            "SELECT id, name, email, created_at, updated_at FROM users WHERE email = $1"
+        )
+        .bind(email)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(AppError::Database)?;
+        Ok(user)
+    }
+
     async fn create(&self, request: CreateUserRequest) -> Result<User> {
         let user = sqlx::query_as::<_, User>(
             "INSERT INTO users (name, email) VALUES ($1, $2) RETURNING id, name, email, created_at, updated_at"
@@ -100,6 +114,33 @@ impl UserRepository for PostgresUserRepository {
         } else {
             Ok(None)
         }
+    }
+
+    async fn find_password_hash_by_email(&self, email: &str) -> Result<Option<(i32, String)>> {
+        let rec = sqlx::query_as::<_, (i32, String)>(
+            "SELECT id, password_hash FROM users WHERE email = $1"
+        )
+        .bind(email)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(AppError::Database)?;
+        Ok(rec)
+    }
+
+    async fn create_with_password(&self, name: &str, email: &str, password_hash: &str) -> Result<User> {
+        let user = sqlx::query_as::<_, User>(
+            "INSERT INTO users (name, email, password_hash) VALUES ($1, $2, $3) RETURNING id, name, email, created_at, updated_at"
+        )
+        .bind(name)
+        .bind(email)
+        .bind(password_hash)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::Database(db_err) if db_err.constraint() == Some("users_email_key") => AppError::EmailConflict,
+            _ => AppError::Database(e),
+        })?;
+        Ok(user)
     }
 }
 

@@ -5,6 +5,7 @@ pub struct Config {
     pub database: DatabaseConfig,
     pub redis: RedisConfig,
     pub server: ServerConfig,
+    pub auth: AuthConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -21,6 +22,13 @@ pub struct RedisConfig {
 pub struct ServerConfig {
     pub host: String,
     pub port: u16,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct AuthConfig {
+    pub jwt_secret: String,
+    pub jwt_issuer: Option<String>,
+    pub allowed_origins: Vec<String>,
 }
 
 impl Config {
@@ -43,6 +51,16 @@ impl Config {
                     .unwrap_or_else(|_| "3000".to_string())
                     .parse()
                     .unwrap_or(3000),
+            },
+            auth: AuthConfig {
+                jwt_secret: std::env::var("JWT_SECRET").unwrap_or_else(|_| "dev-secret-change-me".to_string()),
+                jwt_issuer: std::env::var("JWT_ISSUER").ok(),
+                allowed_origins: std::env::var("CORS_ALLOWED_ORIGINS")
+                    .unwrap_or_else(|_| "http://localhost:5173,http://localhost:8080,http://127.0.0.1:3000".to_string())
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect(),
             },
         })
     }

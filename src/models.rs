@@ -26,6 +26,32 @@ pub struct CreateUserRequest {
     pub email: String,
 }
 
+#[derive(Debug, Deserialize, Validate, GardeValidate)]
+pub struct RegistrationRequest {
+    #[validate(length(min = 2, max = 100))]
+    #[garde(length(min = 2, max = 100))]
+    pub name: String,
+
+    #[validate(email)]
+    #[garde(email)]
+    pub email: String,
+
+    #[validate(length(min = 8, max = 128))]
+    #[garde(length(min = 8, max = 128))]
+    pub password: String,
+}
+
+#[derive(Debug, Deserialize, Validate, GardeValidate)]
+pub struct LoginRequest {
+    #[validate(email)]
+    #[garde(email)]
+    pub email: String,
+
+    #[validate(length(min = 8, max = 128))]
+    #[garde(length(min = 8, max = 128))]
+    pub password: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Validate, GardeValidate)]
 pub struct WsMessage {
     #[validate(length(min = 1, message = "ID cannot be empty"))]

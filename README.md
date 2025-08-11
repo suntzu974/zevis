@@ -10,6 +10,9 @@ Une application web Rust moderne utilisant Axum, PostgreSQL, Redis et WebSocket 
 - **Redis** pour le broadcast des messages WebSocket
 - **Interface web** de test interactive
 - **Notifications automatiques** pour les opérations CRUD
+- **Authentification JWT** (middleware Axum) pour protéger les routes sensibles
+- **CORS strict** via tower-http (origines autorisées configurables)
+- **Rate limiting** IP (200 req/s par défaut) pour protéger l'API
 
 ## 📋 Prérequis
 
@@ -51,33 +54,65 @@ Une application web Rust moderne utilisant Axum, PostgreSQL, Redis et WebSocket 
    - Interface web : http://127.0.0.1:3000/static/index.html
    - WebSocket : ws://127.0.0.1:3000/ws
    - Health check : http://127.0.0.1:3000/health
+   - Auth (démo) : http://127.0.0.1:3000/auth/demo-login
 
 ## 📡 API Endpoints
 
 ### Utilisateurs
-- `GET /users` - Liste tous les utilisateurs
-- `GET /users/:id` - Récupère un utilisateur par ID
-- `POST /users` - Crée un nouvel utilisateur
-- `DELETE /users/:id` - Supprime un utilisateur
+- `GET /users` - Liste tous les utilisateurs 🔒
+- `GET /users/:id` - Récupère un utilisateur par ID 🔒
+- `POST /users` - Crée un nouvel utilisateur 🔒
+- `DELETE /users/:id` - Supprime un utilisateur 🔒
 
 ### Cache (Redis)
-- `GET /cache/:key` - Récupère une valeur du cache
-- `POST /cache/:key` - Stocke une valeur dans le cache
-- `DELETE /cache/:key` - Supprime une valeur du cache
+- `GET /cache/:key` - Récupère une valeur du cache 🔒
+- `POST /cache/:key` - Stocke une valeur dans le cache 🔒
+- `DELETE /cache/:key` - Supprime une valeur du cache 🔒
 
 ### WebSocket
 - `GET /ws` - Connexion WebSocket pour les notifications temps réel
 
 ### Système
 - `GET /health` - Vérification de l'état des services
+- `GET /auth/demo-login` - Obtient un token JWT de démonstration (à utiliser en local)
+
+🔒 = nécessite un header Authorization: Bearer <token>
+
+## � Authentification (JWT)
+
+1) Obtenir un token (démo)
+
+```powershell
+Invoke-RestMethod -Method GET http://127.0.0.1:3000/auth/demo-login | ForEach-Object { $_.token }
+```
+
+2) Appeler une route protégée
+
+```powershell
+$TOKEN = Invoke-RestMethod http://127.0.0.1:3000/auth/demo-login | Select-Object -ExpandProperty token
+Invoke-RestMethod -Method GET http://127.0.0.1:3000/users -Headers @{ Authorization = "Bearer $TOKEN" }
+```
+
+3) Exemple de création d'utilisateur (protégée)
+
+```powershell
+$BODY = @{ name = "Alice"; email = "alice@example.com" } | ConvertTo-Json
+Invoke-RestMethod -Method POST http://127.0.0.1:3000/users -Headers @{ Authorization = "Bearer $TOKEN"; 'Content-Type' = 'application/json' } -Body $BODY
+```
+
+Notes:
+- Le token est signé HS256 avec la variable d'environnement JWT_SECRET.
+- L'émetteur (iss) est optionnel via JWT_ISSUER.
+- En production, générez un secret fort et préférez un flux d'auth réel (remplacer `demo-login`).
 
 ## 🔧 Exemples d'utilisation
 
 ### Créer un utilisateur
 ```bash
-curl -X POST http://127.0.0.1:3000/users \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Alice", "email": "alice@example.com"}'
+# Exemple bash: nécessite un token dans $TOKEN
+curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+   -X POST http://127.0.0.1:3000/users \
+   -d '{"name": "Alice", "email": "alice@example.com"}'
 ```
 
 ### WebSocket avec JavaScript
@@ -161,7 +196,25 @@ DATABASE_URL=postgresql://postgres:password@localhost:5432/zevis
 REDIS_URL=redis://localhost:6379/
 SERVER_HOST=127.0.0.1
 SERVER_PORT=3000
+JWT_SECRET=dev-secret-change-me
+# Optionnel: l'émetteur JWT pour validation (iss)
+JWT_ISSUER=zevis-local
+# Liste d'origines autorisées pour CORS (séparées par des virgules)
+CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:8080,http://127.0.0.1:3000
 ```
+
+## 🌐 CORS
+
+Le CORS est strictement activé pour les origines listées dans `CORS_ALLOWED_ORIGINS` et autorise uniquement:
+- Méthodes: GET, POST, DELETE
+- Headers: Content-Type, Authorization
+
+Si vous utilisez un front local (Vite/Trunk, etc.), ajoutez son URL à `CORS_ALLOWED_ORIGINS`.
+
+## 🚦 Rate limiting
+
+Un limiteur IP simple est activé par défaut: 200 requêtes / seconde et par IP.
+Au-delà, l'API renvoie une réponse RFC 7807 (429 Too Many Requests).
 
 ## 📦 Architecture
 

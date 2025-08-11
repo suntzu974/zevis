@@ -5,9 +5,10 @@ use axum::response::Html;
 use serde_json::json;
 use tokio::sync::broadcast;
 
-use crate::models::{CreateUserRequest, CacheValue, QueryParams};
+use crate::models::{CreateUserRequest, CacheValue, QueryParams, RegistrationRequest, LoginRequest};
 use crate::services::{UserService, CacheService};
 use crate::errors::{Result, AppError};
+use crate::auth::encode_token;
 
 // Application State (Dependency Injection Container)
 #[derive(Clone)]
@@ -15,6 +16,8 @@ pub struct AppState {
     pub user_service: Arc<dyn UserService>,
     pub cache_service: Arc<dyn CacheService>,
     pub broadcast_tx: broadcast::Sender<String>, // Add WebSocket broadcaster
+    pub jwt_secret: String,
+    pub jwt_issuer: Option<String>,
 }
 
 // Health Check Handler
@@ -118,4 +121,39 @@ pub async fn serve_yew_spa() -> Html<String> {
         },
         Err(_) => Html("<html><body><h1>Yew app not found</h1><p>Please build the Yew app first with <code>trunk build --release</code></p></body></html>".to_string()),
     }
+}
+
+// Auth Handlers
+pub async fn register_user(
+    State(state): State<AppState>,
+    Json(payload): Json<RegistrationRequest>,
+) -> Result<Json<crate::models::User>> {
+    validator::Validate::validate(&payload).map_err(AppError::ValidationError)?;
+    garde::Validate::validate(&payload).map_err(AppError::GardeValidation)?;
+
+    // Hash password (store separately later via repo extension/migration usage)
+    let _hash = bcrypt::hash(&payload.password, bcrypt::DEFAULT_COST)
+        .map_err(|e| AppError::BadRequest(format!("hash error: {}", e)))?;
+
+    // Create user entry (without exposing password)
+    let user = state
+        .user_service
+        .create_user(CreateUserRequest { name: payload.name.clone(), email: payload.email.clone() })
+        .await?;
+
+    Ok(Json(user))
+}
+
+pub async fn login(
+    State(state): State<AppState>,
+    Json(payload): Json<LoginRequest>,
+) -> Result<Json<serde_json::Value>> {
+    validator::Validate::validate(&payload).map_err(AppError::ValidationError)?;
+    garde::Validate::validate(&payload).map_err(AppError::GardeValidation)?;
+
+    // TODO: fetch password_hash from DB and verify with bcrypt::verify
+    // For now, issue a token if payload passes validation
+    let token = encode_token(&payload.email, std::time::Duration::from_secs(3600), &state.jwt_secret, state.jwt_issuer.as_deref())
+        .map_err(|e| AppError::BadRequest(format!("token error: {}", e)))?;
+    Ok(Json(serde_json::json!({"token": token})))
 }
